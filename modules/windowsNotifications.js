@@ -18,7 +18,7 @@ class WindowsNotifications {
             if (err) {
                 console.error('Notification error:', err);
             } else {
-                console.log('Notification sent:', title, message);
+                console.log('Notification sent To Windows');
             }
         });
     }
