@@ -32,7 +32,7 @@ class XSOverlay {
             if (err) {
                 console.error('Error sending message:', err);
             } else {
-                console.log('Message sent:', msg);
+                console.log('Message sent to XSOverlay');
             }
         });
     }
