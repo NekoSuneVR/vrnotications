@@ -43,7 +43,7 @@ class OVRToolkit {
                 if (err) {
                     console.error('Error sending message:', err);
                 } else {
-                    console.log('Notification sent:', msg);
+                    console.log('Notification sent To OVRToolkit');
                 }
             });
         } else {
