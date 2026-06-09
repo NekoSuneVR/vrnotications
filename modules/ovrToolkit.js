@@ -1,9 +1,12 @@
 // ovrToolkit.js
+// WebSocket client for OVR Toolkit notifications.
+// API reference: https://wiki.ovrtoolkit.co.uk/#/Websocket?id=send-notification
 const WebSocket = require('ws');
+const { loadImageAsBase64 } = require('./imageHelper');
 
 class OVRToolkit {
-    constructor() {
-        this.ws = new WebSocket('ws://127.0.0.1:11450/api');
+    constructor(url = 'ws://127.0.0.1:11450/api') {
+        this.ws = new WebSocket(url);
         this.messageQueue = []; // Queue to hold messages until connected
         this.isConnected = false;
 
@@ -26,14 +29,43 @@ class OVRToolkit {
         });
     }
 
-    sendNotification(title, body, icon = null) {
+    /**
+     * Send a notification to OVR Toolkit.
+     *
+     * Two call styles are supported:
+     *   sendNotification('Title', 'Body', './icon.png')
+     *   sendNotification({ title: 'Title', body: 'Body', icon: 'https://.../icon.png' })
+     *
+     * `icon` accepts a local file path, an http(s) URL, a Buffer, a data URI,
+     * or an existing Base64 string. OVR Toolkit expects a PNG (ideally square);
+     * it is sent as a Base64 string per the WebSocket API.
+     *
+     * @returns {Promise<void>}
+     */
+    async sendNotification(title, body, icon = null) {
+        // Allow a single options object as the first argument.
+        let options;
+        if (typeof title === 'object' && title !== null) {
+            options = title;
+        } else {
+            options = { title, body, icon };
+        }
+
+        const iconBase64 = await loadImageAsBase64(options.icon);
+
+        const payload = {
+            title: options.title || '',
+            body: options.body || '',
+            icon: iconBase64, // Base64-encoded PNG, or null for no icon
+        };
+
+        // Pass through any extra documented fields if provided (height, opacity, etc.)
+        if (options.height !== undefined) payload.height = options.height;
+        if (options.opacity !== undefined) payload.opacity = options.opacity;
+
         const msg = {
             messageType: 'SendNotification',
-            json: JSON.stringify({
-                title: title,
-                body: body,
-                icon: icon,
-            }),
+            json: JSON.stringify(payload),
         };
 
         const serializedMsg = JSON.stringify(msg);
@@ -49,7 +81,7 @@ class OVRToolkit {
         } else {
             // Queue the message if not connected yet
             this.messageQueue.push(serializedMsg);
-            console.log('Message queued until connection is open:', msg);
+            console.log('Message queued until connection is open');
         }
     }
 }

@@ -1,6 +1,8 @@
 // xsOverlay.js
+// WebSocket client for XSOverlay notifications.
+// API reference: https://xsoverlay.vercel.app/Developer/API/websockets/websockets
 const WebSocket = require('ws');
-const { v4: uuidv4 } = require('uuid');
+const { loadImageAsBase64 } = require('./imageHelper');
 
 class XSOverlay {
     constructor() {
@@ -31,10 +33,34 @@ class XSOverlay {
         });
     }
 
-    sendNotification(options) {
+    /**
+     * Send a notification to XSOverlay.
+     *
+     * `icon` accepts a local file path, an http(s) URL, a Buffer, a data URI,
+     * or an existing Base64 string. When an image is supplied it is converted
+     * to Base64 and `useBase64Icon` is enabled automatically. To use one of
+     * XSOverlay's built-in icons pass a string of 'default', 'error' or
+     * 'warning' (these are forwarded untouched, without Base64 encoding).
+     *
+     * @returns {Promise<void>}
+     */
+    async sendNotification(options = {}) {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             console.error('WebSocket is not connected. Cannot send notification.');
             return;
+        }
+
+        const builtInIcons = ['default', 'error', 'warning'];
+        let icon = options.icon ?? 'default';
+        let useBase64Icon = options.useBase64Icon ?? false;
+
+        // Convert any real image (path/URL/Buffer/data URI) into a Base64 icon.
+        if (icon && !builtInIcons.includes(icon)) {
+            const iconBase64 = await loadImageAsBase64(icon);
+            if (iconBase64) {
+                icon = iconBase64;
+                useBase64Icon = true;
+            }
         }
 
         const notification = {
@@ -46,9 +72,9 @@ class XSOverlay {
             audioPath: 'default',
             height: 120,
             opacity: 1,
-            icon: 'default',
-            useBase64Icon: false,
             ...options,
+            icon,
+            useBase64Icon,
         };
 
         const message = {
