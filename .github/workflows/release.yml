@@ -1,0 +1,161 @@
+name: Release & Publish
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - RELEASE
+      - BETA
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org/
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm install
+
+      # ✅ ALWAYS pull the base version from package.json
+      - name: Get Base Version from package.json
+        shell: pwsh
+        run: |
+          $base = (node -p "require('./package.json').version")
+          Write-Host "Base version from package.json: $base"
+          Add-Content -Path $env:GITHUB_ENV -Value "BASE_VERSION=$base"
+
+      - name: Determine Channel + Version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_name }}" -eq "BETA") {
+            $channel    = "beta"
+            $tag        = "v$($env:BASE_VERSION)-beta.${{ github.run_number }}"
+            $version    = "$($env:BASE_VERSION)-beta.${{ github.run_number }}"
+            $name       = "vrnotications BETA v$($env:BASE_VERSION)-${{ github.run_number }}"
+            $prerelease = "true"
+            $npmtag     = "beta"
+          }
+          else {
+            $channel    = "release"
+            $tag        = "v$($env:BASE_VERSION)"
+            $version    = $env:BASE_VERSION
+            $name       = "vrnotications v$($env:BASE_VERSION)"
+            $prerelease = "false"
+            $npmtag     = "latest"
+          }
+
+          Write-Host "Channel:    $channel"
+          Write-Host "Tag:        $tag"
+          Write-Host "Version:    $version"
+          Write-Host "Name:       $name"
+          Write-Host "npm tag:    $npmtag"
+
+          Add-Content -Path $env:GITHUB_ENV -Value "CHANNEL=$channel"
+          Add-Content -Path $env:GITHUB_ENV -Value "TAG=$tag"
+          Add-Content -Path $env:GITHUB_ENV -Value "VERSION=$version"
+          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_NAME=$name"
+          Add-Content -Path $env:GITHUB_ENV -Value "PRERELEASE=$prerelease"
+          Add-Content -Path $env:GITHUB_ENV -Value "NPM_TAG=$npmtag"
+
+      # Stamp the resolved version into package.json (beta builds get a unique prerelease version)
+      - name: Set Publish Version
+        shell: pwsh
+        run: |
+          npm version $env:VERSION --no-git-tag-version --allow-same-version
+          Write-Host "package.json version set to $env:VERSION"
+
+      - name: Publish to npm
+        shell: pwsh
+        run: npm publish --access public --tag $env:NPM_TAG
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPMJS_ACCESS_TOKEN }}
+
+      - name: Pack Tarball (release asset)
+        shell: pwsh
+        run: |
+          npm pack
+          $tgz = Get-ChildItem -Filter *.tgz | Select-Object -First 1
+          Write-Host "Packed: $($tgz.Name)"
+          Add-Content -Path $env:GITHUB_ENV -Value "TARBALL=$($tgz.Name)"
+
+      # 🧾 Generate the changelog / release notes on build
+      - name: Generate Release Notes
+        id: notes
+        uses: release-drafter/release-drafter@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          version: ${{ env.VERSION }}
+          tag: ${{ env.TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          prerelease: ${{ env.PRERELEASE == 'true' }}
+
+      # 📋 Print the changelog as a prompt in the run log
+      - name: Save & Print Release Notes
+        shell: pwsh
+        run: |
+          $notes = @"
+          ${{ steps.notes.outputs.body }}
+          "@
+          Set-Content -Path release_notes.txt -Value $notes
+          Write-Host "================ CHANGELOG ($($env:CHANNEL.ToUpper())) ================"
+          Write-Host $notes
+          Write-Host "===================================================="
+
+      - name: Create GitHub Release + Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          prerelease: ${{ env.PRERELEASE == 'true' }}
+          body: |
+            ${{ steps.notes.outputs.body }}
+
+            **Install**
+            ```bash
+            npm install @nekosuneprojects/vrnotications@${{ env.NPM_TAG }}
+            ```
+          files: |
+            ${{ env.TARBALL }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send Discord Notification
+        shell: pwsh
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:DISCORD_WEBHOOK)) {
+            Write-Host "No DISCORD_WEBHOOK secret set — skipping Discord notification."
+            exit 0
+          }
+
+          $notes = Get-Content release_notes.txt -Raw
+
+          $json = @{
+            username = "vrnotications Bot"
+            content  = "**UPDATE ($($env:CHANNEL.ToUpper()))** — @nekosuneprojects/vrnotications"
+            embeds   = @(
+              @{
+                title       = "vrnotications $env:VERSION"
+                description = "$notes`n`n``npm install @nekosuneprojects/vrnotications@$($env:NPM_TAG)``"
+                color       = if ($env:CHANNEL -eq "beta") { 16750848 } else { 5763719 }
+                timestamp   = (Get-Date).ToString("o")
+              }
+            )
+          } | ConvertTo-Json -Depth 10
+
+          Invoke-RestMethod -Uri $env:DISCORD_WEBHOOK -Method Post -ContentType 'application/json' -Body $json
