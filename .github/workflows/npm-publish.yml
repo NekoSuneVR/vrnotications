@@ -60,7 +60,7 @@ jobs:
             exit $status
           fi
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.npm_token }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Read the changelog section for this version (CHANGELOG.md is maintained
       # by hand, so we only READ it — no `operation: release`, which would fail
