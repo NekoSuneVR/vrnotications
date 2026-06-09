@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-06-10
+
+### Changed
+
+- npm publish workflow now fails loudly on real errors (e.g. a scoped-package `404` from a missing `NPM_TOKEN` or insufficient scope rights) and only skips on a genuine "already published" conflict, instead of masking failures as a successful "skip".
+
 ## [1.0.1] - 2026-06-09
 
 ### Fixed
@@ -35,6 +41,7 @@ First release under the `@nekosuneprojects` scope.
 
 - Removed a broken, undeclared `uuid` import in `xsOverlay.js` that would throw on require.
 
-[Unreleased]: https://github.com/NekoSuneProjects/vrnotications/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/NekoSuneProjects/vrnotications/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/NekoSuneProjects/vrnotications/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/NekoSuneProjects/vrnotications/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/NekoSuneProjects/vrnotications/releases/tag/v1.0.0
