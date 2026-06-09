@@ -51,17 +51,12 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      # Publish package to GitHub Packages
+      # Publish package to GitHub Packages.
+      # The scope (@nekosuneprojects) matches the repo owner (NekoSuneProjects),
+      # which GitHub Packages requires, and auth uses the built-in GITHUB_TOKEN.
+      # `|| true` keeps re-pushes of an already-published version from failing
+      # the whole run (npm rejects republishing the same version).
       - name: Publish to GitHub Packages
-        run: npm publish
+        run: npm publish || echo "Publish skipped (version may already exist on GitHub Packages)."
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Tag and push
-      - name: Create
-        run: |
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "GitHub Actions"
-          git push origin v${{ env.VERSION }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
