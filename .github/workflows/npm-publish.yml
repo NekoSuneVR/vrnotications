@@ -42,9 +42,23 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       # Publish version to npm.
-      # `|| echo` keeps a re-run (same version already on npm) from failing the job.
+      # Tolerate ONLY a genuine "already published" conflict (re-runs of the same
+      # version). Any other failure — e.g. a 404, which means the token can't
+      # publish under the @nekosuneprojects scope — fails the job loudly.
       - name: Publish to npm
-        run: npm publish --access public || echo "Publish skipped (version may already exist on npm)."
+        run: |
+          set +e
+          out=$(npm publish --access public 2>&1)
+          status=$?
+          echo "$out"
+          if [ $status -ne 0 ]; then
+            if echo "$out" | grep -qiE "cannot publish over|previously published|EPUBLISHCONFLICT|already exists"; then
+              echo "::warning::Version already published to npm — skipping."
+              exit 0
+            fi
+            echo "::error::npm publish failed. If this is a 404 on a scoped package, the NPM_TOKEN secret is missing/invalid or your account cannot publish under the @nekosuneprojects scope (create the npm org or use a scope you own)."
+            exit $status
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.npm_token }}
 
