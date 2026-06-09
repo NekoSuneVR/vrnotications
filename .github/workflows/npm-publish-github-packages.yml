@@ -1,9 +1,11 @@
 name: Node.js Package GitHub Mode
 
 on:
-  release:
-    types: 
-      - published
+  push:
+    branches:
+      - main
+      - RELEASE
+      - BETA
 
 permissions:
   contents: write
